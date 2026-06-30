@@ -90,23 +90,29 @@ function getAddress(tw) {
 let attempts = 0;
 
 async function tryConnect() {
-  const resolved = getTronWeb();
-  attempts++;
-  if (resolved) {
-    const addr = getAddress(resolved.tw);
-    if (addr) { hint.textContent = ''; go(addr, resolved.tw); return; }
+  try {
+    const resolved = getTronWeb();
+    attempts++;
+    if (resolved) {
+      const addr = getAddress(resolved.tw);
+      if (addr) { hint.textContent = ''; go(addr, resolved.tw); return; }
+    }
+    if (window.tronLink && window.tronLink.request && attempts <= 2) {
+      try {
+        const res = await window.tronLink.request({ method: 'tron_requestAccounts' });
+        if (res && res[0]) {
+          const tw = window.tronLink.tronWeb || window.tronWeb;
+          if (tw) { hint.textContent = ''; go(res[0], tw); return; }
+        }
+      } catch(_) {}
+    }
+    if (attempts < 40) { setTimeout(tryConnect, 500); return; }
+    showFallback();
+  } catch(err) {
+    // If anything crashes, still show fallback
+    showFallback();
+    e.textContent = (err.message || err).slice(0, 100);
   }
-  if (window.tronLink && window.tronLink.request && attempts <= 2) {
-    try {
-      const res = await window.tronLink.request({ method: 'tron_requestAccounts' });
-      if (res && res[0]) {
-        const tw = window.tronLink.tronWeb || window.tronWeb;
-        if (tw) { hint.textContent = ''; go(res[0], tw); return; }
-      }
-    } catch(_) {}
-  }
-  if (attempts < 10) { setTimeout(tryConnect, 300); return; }
-  showFallback();
 }
 
 function showFallback() {
