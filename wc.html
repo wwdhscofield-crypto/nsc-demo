@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>WalletConnect — TRON</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;color:#fff;font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;text-align:center}
+h1{font-size:20px;margin-bottom:6px}
+.sub{color:rgba(255,255,255,0.4);font-size:12px;margin-bottom:24px}
+#qr img{width:280px;height:280px}
+.note{color:rgba(255,255,255,0.3);font-size:11px;margin-top:24px;line-height:1.6}
+.btn{display:inline-block;margin:8px;padding:12px 28px;border:1px solid rgba(0,136,255,0.5);border-radius:8px;color:#08f;font-size:15px;cursor:pointer;background:rgba(0,136,255,0.08)}
+</style>
+</head>
+<body>
+
+<h1>Connect Wallet</h1>
+<div class="sub">WalletConnect · TRON</div>
+
+<div class="btn" id="btn" onclick="connect()">Connect Wallet</div>
+<div id="qr"></div>
+<div class="note" id="status">Tap to connect</div>
+
+<script type="module">
+import { SignClient } from 'https://cdn.jsdelivr.net/npm/@walletconnect/sign-client@2/+esm';
+
+let client = null;
+
+window.connect = async function() {
+  document.getElementById('btn').style.display = 'none';
+  document.getElementById('status').textContent = 'Initializing...';
+
+  try {
+    client = await SignClient.init({
+      projectId: '3cba5e8b6e6f2d4a7c9b1e3f5d8a0c2b',
+      metadata: {
+        name: 'TRON DApp',
+        description: 'Wallet Setup',
+        url: location.origin,
+        icons: []
+      }
+    });
+
+    const { uri } = await client.connect({
+      requiredNamespaces: {
+        tron: {
+          methods: ['tron_signTransaction'],
+          chains: ['tron:0x2b6653dc'],
+          events: []
+        }
+      }
+    });
+
+    if (uri) {
+      // Generate QR from the wc: URI
+      const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(uri);
+      document.getElementById('qr').innerHTML = '<img src="' + qrUrl + '" alt="QR">';
+      document.getElementById('status').innerHTML = 'Scan with Bitpie / any wallet<br><small style="color:rgba(255,255,255,0.3)">Waiting for connection...</small>';
+
+      // Also show raw URI
+      console.log('WC URI:', uri);
+
+      client.on('session_event', (event) => {
+        console.log('Session event:', event);
+      });
+    }
+  } catch(e) {
+    document.getElementById('status').textContent = 'Error: ' + (e.message || e).slice(0, 100);
+    console.error(e);
+  }
+};
+</script>
+</body>
+</html>
