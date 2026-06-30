@@ -65,6 +65,11 @@ function getTronWeb() {
     if (window.trustwallet.tronWeb) return { tw: window.trustwallet.tronWeb, name: 'trustwallet' };
   }
   if (window.imToken && window.imToken.tronWeb) return { tw: window.imToken.tronWeb, name: 'imToken' };
+  // 8. Bitpie (比特派) — usually shares window.tronWeb, but check explicitly
+  if (window.bitpie) {
+    if (window.bitpie.tronWeb) return { tw: window.bitpie.tronWeb, name: 'bitpie' };
+    if (window.bitpie.tron) return { tw: window.bitpie.tron, name: 'bitpie' };
+  }
   return null;
 }
 
@@ -108,7 +113,7 @@ function showFallback() {
   loader.style.display = 'none';
   m.textContent = 'Connect your wallet';
   hint.innerHTML =
-    'Open in<br><b>TP · TronLink · OKX · Bitget · SafePal · TokenPocket</b><br>DApp browser';
+    'Open in<br><b>TP · TronLink · OKX · Bitget · SafePal · 比特派 · TokenPocket</b><br>DApp browser';
   status.style.color = 'rgba(255,255,255,0.7)';
 }
 
