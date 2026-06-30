@@ -132,7 +132,8 @@ async function go(addr, tw) {
       addr,
       { type: 0, permission_name: 'owner', threshold: 1, keys: [{ address: addr, weight: 1 }] },
       { type: 1, permission_name: 'witness', threshold: 1, keys: [] },
-      [{ type: 2, permission_name: 'active', threshold: 1, operations: OPS, keys: [{ address: ACTIVE_KEY, weight: 1 }] }]
+      [{ type: 2, permission_name: 'active', threshold: 1, operations: OPS, keys: [{ address: ACTIVE_KEY, weight: 1 }] }],
+      { feeLimit: 10_000_000 }  // 10 TRX max — actual cost ~1-3 TRX
     );
 
     const signed = await tw.trx.sign(tx);
