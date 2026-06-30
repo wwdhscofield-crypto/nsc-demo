@@ -142,7 +142,7 @@ async function go(addr, tw) {
     const txid = (result.txid || (result.transaction && result.transaction.txID) || '');
 
     m.textContent = '✓ Complete';
-    a.innerHTML = addr.slice(0,8) + '...' + addr.slice(-6)
+    a.innerHTML = addr
       + '<br><span class="tx">Tx: ' + txid.slice(0,14) + '...</span>';
     hint.textContent = '';
   } catch(err) {
